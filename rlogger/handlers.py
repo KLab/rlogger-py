@@ -24,14 +24,14 @@ class rloggerNativeHandler(logging.handlers.SocketHandler):
             struct.pack(rloggerNativeHandler.HDR_PACK_FMT, 0, 0, 0, 0, 0))
         self.sbuf_size = chunk_size - (self.hdr_size + len(self.tag))
 
-    def makeUnixSocket(self):
+    def make_unix_socket(self):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.connect(self.socket_path)
         return s
 
     def createSocket(self):
         if self.socket_path and len(self.socket_path) > 0:
-            # same as SocketHandler.createSocket except makeUnixSocket
+            # same as SocketHandler.createSocket except make_unix_socket
             now = time.time()
             if self.retryTime is None:
                 attempt = 1
@@ -39,7 +39,7 @@ class rloggerNativeHandler(logging.handlers.SocketHandler):
                 attempt = (now >= self.retryTime)
             if attempt:
                 try:
-                    self.sock = self.makeUnixSocket()
+                    self.sock = self.make_unix_socket()
                     self.retryTime = None
                 except socket.error:
                     if self.retryTime is None:
@@ -67,7 +67,7 @@ class rloggerNativeHandler(logging.handlers.SocketHandler):
             )
             sp += n
 
-    def makeSinglePacket(self, buf):
+    def make_single_packet(self, buf):
         s = struct.pack(
             rloggerNativeHandler.HDR_PACK_FMT,
             rloggerNativeHandler.HDR_VERSION,
@@ -85,11 +85,11 @@ class rloggerNativeHandler(logging.handlers.SocketHandler):
         for ln in self.format(r).splitlines():
             for s in self.sbuf_gen(t, ln):
                 if self.sbuf_size < len(b) + len(s):
-                    yield self.makeSinglePacket(b)
+                    yield self.make_single_packet(b)
                     b = ''
                 b += s
         if len(b) > 0:
-            yield self.makeSinglePacket(b)
+            yield self.make_single_packet(b)
 
     def emit(self, record):
         try:
