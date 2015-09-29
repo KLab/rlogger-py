@@ -52,27 +52,20 @@ class rloggerNativeHandler(logging.handlers.SocketHandler):
         else:
             logging.handlers.SocketHandler.createSocket(self)
 
-    def makeRLoggerPackets(self, record):
-        a = []
-        b = ''
-        t = time.time()
-        for ln in self.format(record).splitlines():
-            v = ln.encode(sys.getdefaultencoding())
-            if len(v) > 0:
-                s = self.makeSBuf(t, v)
-                if len(b) + len(s) > self.sbuf_size:
-                    a.append(self.makeSinglePacket(b))
-                    b = ''
-                b += s
-        if len(b) > 0:
-            a.append(self.makeSinglePacket(b))
-        return ''.join(a)
-
-    def makeSBuf(self, timestamp, data):
-        n = len(data)
-        s = struct.pack(rloggerNativeHandler.SBUF_PACK_FMT + str(n) + 's',
-                        int(timestamp), n, data)
-        return s
+    def sbuf_gen(self, t, s):
+        b = buffer(s.encode(sys.getdefaultencoding()))
+        sp = 0
+        while True:
+            ep = sp + self.sbuf_size
+            v = b[sp:ep]
+            n = len(v)
+            if n == 0:
+                break
+            yield struct.pack(
+                rloggerNativeHandler.SBUF_PACK_FMT + str(n) + 's',
+                int(t), n, v
+            )
+            sp += n
 
     def makeSinglePacket(self, buf):
         s = struct.pack(
@@ -86,11 +79,22 @@ class rloggerNativeHandler(logging.handlers.SocketHandler):
         s += self.tag + buf
         return s
 
+    def packet_gen(self, r):
+        t = time.time()
+        b = ''
+        for ln in self.format(r).splitlines():
+            for s in self.sbuf_gen(t, ln):
+                if self.sbuf_size < len(b) + len(s):
+                    yield self.makeSinglePacket(b)
+                    b = ''
+                b += s
+        if len(b) > 0:
+            yield self.makeSinglePacket(b)
+
     def emit(self, record):
         try:
-            s = self.makeRLoggerPackets(record)
-            if len(s) > 0:
-                self.send(s)
+            for p in self.packet_gen(record):
+                self.send(p)
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
